@@ -1,4 +1,4 @@
-# OpenTracing API for Erlang
+# OpenTracing API for Erlang [![Build Status](https://travis-ci.org/kivra/opentracing-erlang.svg?branch=master)](https://travis-ci.org/kivra/opentracing-erlang)
 
 This package is a Erlang platform API for OpenTracing.
 
