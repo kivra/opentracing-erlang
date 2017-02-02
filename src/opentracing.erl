@@ -35,7 +35,7 @@
            , ctx        = error(ctx)       :: span_ctx()
            , tracer     = error(tracer)    :: module()
            , start_ts   = error(start_ts)  :: erlang:timestamp()
-           , finish_ts  = undefined        :: erlang:timestamp()
+           , finish_ts  = undefined        :: undefined | erlang:timestamp()
            , tags       = maps:new()       :: span_tags()
            }).
 -record(s_ctx, { trace_id = error(trace_id) :: trace_id()

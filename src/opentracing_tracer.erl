@@ -14,7 +14,7 @@
 
 %%%_* Types ============================================================
 -type carrier()          :: any().
--type options()          :: map().
+-type options()          :: list(proplists:proplist() | map()).
 -type serialize_format() :: text_map | binary | httpheaders.
 
 %%%_* Behaviour ========================================================
