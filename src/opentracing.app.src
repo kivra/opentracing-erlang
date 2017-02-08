@@ -1,14 +1,16 @@
 {application, opentracing,
   [ {description, "Opentracing"}
-  , {vsn, "0.1.0"}
-  , {registered, []}
+  , {vsn,         "0.1.0"}
+  , {registered,  [zipkin_sup, zipkin_tracer]}
+  , {mod,         {zipkin_app, [[]]}}
   , {applications,
     [ kernel
     , stdlib
+    , jsx
     ]}
-  , {env,     []}
-  , {modules, []}
+  , {env,      []}
+  , {modules,  []}
   , {licenses, ["MIT"]}
-  , {links, [{"Github", "https://github.com/kivra/opentracing-erlang"}]}
+  , {links,    [{"Github", "https://github.com/kivra/opentracing-erlang"}]}
   ]
 }.

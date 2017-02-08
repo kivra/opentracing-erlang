@@ -23,6 +23,13 @@
 -export([span_ctx/1]).
 -export([get_span_tags/1]).
 -export([set_span_tags/2]).
+-export([get_span_id/1]).
+-export([get_span_kind/1]).
+-export([get_parent_id/1]).
+-export([get_trace_id/1]).
+-export([get_operation/1]).
+-export([get_timestamp/1]).
+-export([get_duration/1]).
 
 %%%_* Types ------------------------------------------------------------
 -export_type([options/0]).
@@ -31,12 +38,14 @@
 -export_type([baggage/0]).
 
 %%%_* Records ==========================================================
--record(s, { operation  = error(operation) :: any()
-           , ctx        = error(ctx)       :: span_ctx()
-           , tracer     = error(tracer)    :: module()
-           , start_ts   = error(start_ts)  :: erlang:timestamp()
-           , finish_ts  = undefined        :: undefined | erlang:timestamp()
-           , tags       = maps:new()       :: span_tags()
+-record(s, { operation = error(operation) :: any()
+           , ctx       = error(ctx)       :: span_ctx()
+           , tracer    = error(tracer)    :: module()
+           , start_ts  = error(start_ts)  :: non_neg_integer()
+           , duration  = undefined        :: undefined | non_neg_integer()
+           , parent_id = undefined        :: undefined | span_id()
+           , kind      = server           :: client | server
+           , tags      = maps:new()       :: span_tags()
            }).
 -record(s_ctx, { trace_id = error(trace_id) :: trace_id()
                , span_id  = error(span_id)  :: span_id()
@@ -80,34 +89,34 @@ tracer(Tracer, Options) ->
 
 %% @doc Inject SpanCtx for over-the-wire serialization of data
 -spec inject(module(), span_ctx(), serialize_format(), carrier()) ->
-    {ok, span_ctx()} | {error, atom()}.
+  {ok, span_ctx()} | {error, atom()}.
 inject(Tracer, SpanCtx, Format, Carrier) ->
-    Tracer:inject(SpanCtx, Format, Carrier).
+  Tracer:inject(SpanCtx, Format, Carrier).
 
 %% @doc Extract SpanCtx from over-the-wire serialized data
 -spec extract(module(), serialize_format(), carrier()) ->
-    {ok, span_ctx()} | {error, atom()}.
+  {ok, span_ctx()} | {error, atom()}.
 extract(Tracer, Format, Carrier) ->
-    Tracer:extract(Format, Carrier).
+  Tracer:extract(Format, Carrier).
 
 %% @doc Start a new root span
 -spec start_span(tracer(), operation()) ->
   {ok, span()} | {error, atom()}.
 start_span(Tracer, Operation) ->
-  {ok, new_span(Tracer, Operation, new_ctx())}.
+  {ok, new_span(Tracer, Operation, undefined, new_ctx())}.
 
 %% @doc Start a new child or followsfrom span
 -spec start_span(tracer(), operation(), span_options()) ->
   {ok, span()} | {error, atom()}.
 start_span(Tracer, Operation, Options) ->
-  TraceId =
+  SCtx =
     case { lists:keyfind(child_of, 1, Options)
          , lists:keyfind(follows_from, 1, Options) }
     of
-      {{child_of, Ctx}, false}               -> Ctx#s_ctx.trace_id;
-      {false,           {follows_from, Ctx}} -> Ctx#s_ctx.trace_id
+      {{child_of, Ctx}, false}               -> Ctx;
+      {false,           {follows_from, Ctx}} -> Ctx
     end,
-  {ok, new_span(Tracer, Operation, new_ctx(TraceId))}.
+  {ok, new_span(Tracer, Operation, undefined, new_ctx(SCtx#s_ctx.trace_id))}.
 
 -spec run_span(tracer(), operation(), fun()) ->
     ok | {error, atom()}.
@@ -131,13 +140,13 @@ run_span(Tracer, Operation, Fun, Options) ->
 -spec start_span_from_context(tracer(), any(), span_ctx()) ->
   span().
 start_span_from_context(Tracer, Operation, SpanCtx) ->
-  new_span(Tracer, Operation, SpanCtx).
+  new_span(Tracer, Operation, undefined, new_ctx(get_trace_id(SpanCtx))).
 
 %% @doc Report a span as finished to the Tracer
 -spec finish_span(tracer(), span()) ->
   ok | {error, atom()}.
-finish_span(Tracer, Span) ->
-  Tracer:finish_span(Span#s{ finish_ts = ts() }).
+finish_span(Tracer, #s{start_ts = StartTs} = Span) ->
+  Tracer:finish_span(Span#s{ duration = calc_duration(StartTs) }).
 
 %%%_ * Getter / Setters ------------------------------------------------
 %% @doc Return the Span Context from a Span
@@ -149,8 +158,8 @@ span_ctx(#s{ ctx = SpanCtx }) ->
 %% @doc Get Tags from a Span
 -spec get_span_tags(span()) ->
   span_tags().
-get_span_tags(Span) ->
-  Span#s.tags.
+get_span_tags(#s{ tags = Tags }) ->
+  Tags.
 
 %% @doc Set Tags on a Span
 -spec set_span_tags(span(), span_tags()) ->
@@ -158,12 +167,42 @@ get_span_tags(Span) ->
 set_span_tags(Span, Tags) ->
   Span#s{ tags = Tags }.
 
+get_trace_id(#s_ctx{ trace_id = TraceId}) ->
+  TraceId.
+
+get_span_id(#s_ctx{ span_id = SpanId }) ->
+  SpanId.
+
+get_parent_id(#s{ parent_id = ParentId }) ->
+  ParentId.
+
+get_span_kind(#s{ kind = Kind }) ->
+  Kind.
+
+get_operation(#s{ operation = Operation }) ->
+  Operation.
+
+get_timestamp(#s{ start_ts = Timestamp }) ->
+  Timestamp.
+
+get_duration(#s{ duration = Duration }) ->
+  Duration.
+
 %%%_* Private functions ================================================
+%% @doc since we always time our spans we will round up to 1 microsecond if the
+%%      span took less.
+calc_duration(StartTs) ->
+  case ts() - StartTs of
+    0   -> 1;
+    Val -> Val
+  end.
+
 ts() ->
-  os:timestamp().
+  {MegaSecs, Secs, MicroSecs} = os:timestamp(),
+  (MegaSecs * 1000000 + Secs) * 1000000 + MicroSecs.
 
 new_ctx() ->
-  new_ctx(generate_id(), generate_id()).
+  new_ctx(generate_id()).
 
 new_ctx(TraceId) ->
   new_ctx(TraceId, generate_id()).
@@ -171,14 +210,15 @@ new_ctx(TraceId) ->
 new_ctx(TraceId, SpanId) ->
   #s_ctx{ trace_id = TraceId, span_id = SpanId }.
 
-new_span(Tracer, Operation, SpanCtx) ->
-  #s{ tracer = Tracer
+new_span(Tracer, Operation, ParentId, SpanCtx) ->
+  #s{ tracer    = Tracer
     , operation = Operation
-    , start_ts = ts()
-    , ctx = SpanCtx }.
+    , start_ts  = ts()
+    , parent_id = ParentId
+    , ctx       = SpanCtx }.
 
 generate_id() ->
-  list_to_integer(lists:concat([rand:uniform(10)-1 || _ <- lists:seq(1, 20)])).
+  rand:uniform(16#ffffffffffffffff).
 
 %%%_* Editor ===========================================================
 %%% Local Variables:

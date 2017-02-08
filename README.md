@@ -8,5 +8,8 @@ In order to understand the Erlang platform API, one must first be familiar with 
 [OpenTracing project](http://opentracing.io) and
 [terminology](http://opentracing.io/documentation/pages/spec.html) more specifically.
 
+## TODO
+[ ] Implement `span:log_event/2`
+
 ## License
 MIT
