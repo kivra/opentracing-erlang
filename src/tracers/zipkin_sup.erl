@@ -26,8 +26,10 @@ init(Args) ->
 worker_spec(M, A, Restart) ->
   {M, {M, start_link, A}, Restart, brutal_kill, worker, [M]}.
 
-%%%_* Emacs ============================================================
+%%%_* Editor ===========================================================
 %%% Local Variables:
 %%% allout-layout: t
 %%% erlang-indent-level: 2
+%%% vim: sw=2 ts=2 et
+%%%
 %%% End:

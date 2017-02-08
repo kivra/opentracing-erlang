@@ -9,7 +9,7 @@ In order to understand the Erlang platform API, one must first be familiar with 
 [terminology](http://opentracing.io/documentation/pages/spec.html) more specifically.
 
 ## TODO
-[ ] Implement `span:log_event/2`
+- [ ] Implement `span:log_event/2`
 
 ## License
 MIT

@@ -44,7 +44,7 @@
            , start_ts  = error(start_ts)  :: non_neg_integer()
            , duration  = undefined        :: undefined | non_neg_integer()
            , parent_id = undefined        :: undefined | span_id()
-           , kind      = server           :: client | server
+           , kind      = server           :: client | server | resource
            , tags      = maps:new()       :: span_tags()
            }).
 -record(s_ctx, { trace_id = error(trace_id) :: trace_id()

@@ -48,7 +48,7 @@
 %%%_ * Types -----------------------------------------------------------
 -record(s, { ip           = error('s.ip')   :: string()                 % Ip
            , port         = error('s.port') :: non_neg_integer()        % Port
-           , tref         = error('s.tref') :: reference()              % timer
+           , tref         = error('s.tref') :: timer:tref()             % timer
            , spans        = []              :: list(opentracing:span()) % Spans
            , service_name = <<"unknown">>   :: list(opentracing:span()) % Name
            }).
@@ -111,12 +111,10 @@ flush_spans(#s{ ip=Ip, port=Port, service_name=SName}, Spans) ->
   end.
 
 send_spans(Ip, Port, Spans) ->
-  SpanList = lists:reverse(Spans),
-    io:format("Spans: ~p~n", [SpanList]),
   Req = { "http://"++Ip++":"++integer_to_list(Port)++"/api/v1/spans"
         , []
         , "application/json"
-        , jsx:encode(SpanList) },
+        , jsx:encode(lists:reverse(Spans)) },
   try httpc:request(post, Req, ?http_options, ?options) of
     {ok, {202, _}}          -> ok;
     {ok, {Status, Payload}} -> {error, {Status, Payload}};
@@ -157,7 +155,7 @@ binary_annotations(ServiceName, Span) ->
        , opentracing:get_span_kind(Span) }
   of
     %{undefined, client} ->
-    {undefined, undefined} ->
+    {undefined, resource} -> %% @TODO: Change this
       [binary_annotation(ServiceName, ?LOCAL_COMPONENT, local_ip_v4())];
     _ ->
       []

@@ -22,13 +22,15 @@ stop(_State) ->
 -include_lib("eunit/include/eunit.hrl").
 
 basic_test() ->
-  ok = application:start(opentracing),
-  ok = application:stop(opentracing).
+  {ok, _} = application:ensure_all_started(opentracing),
+  ok      = application:stop(opentracing).
 
 -endif.
 
-%%%_* Emacs ============================================================
+%%%_* Editor ===========================================================
 %%% Local Variables:
 %%% allout-layout: t
 %%% erlang-indent-level: 2
+%%% vim: sw=2 ts=2 et
+%%%
 %%% End:
