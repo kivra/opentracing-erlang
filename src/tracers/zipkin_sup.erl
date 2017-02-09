@@ -18,6 +18,7 @@
 start_link() ->
   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+init([])   -> init(application:get_all_env(opentracing));
 init(Args) ->
   {ok, { {one_for_one, 4, 3600}
        , [worker_spec(zipkin_tracer, [Args], permanent)] }}.
