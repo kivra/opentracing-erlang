@@ -119,7 +119,7 @@ start_span(Tracer, Operation, Options) ->
   {ok, new_span(Tracer, Operation, undefined, new_ctx(SCtx#s_ctx.trace_id))}.
 
 -spec run_span(tracer(), operation(), fun()) ->
-    ok | {error, atom()}.
+  ok | {error, atom()}.
 run_span(Tracer, Operation, Fun) ->
     {ok, Span} = start_span(Tracer, Operation),
     case Fun(Span) of
@@ -128,7 +128,7 @@ run_span(Tracer, Operation, Fun) ->
     end.
 
 -spec run_span(tracer(), operation(), fun(), span_options()) ->
-    ok | {error, atom()}.
+  ok | {error, atom()}.
 run_span(Tracer, Operation, Fun, Options) ->
     {ok, Span} = start_span(Tracer, Operation, Options),
     case Fun(Span) of
@@ -138,16 +138,19 @@ run_span(Tracer, Operation, Fun, Options) ->
 
 %% @doc Start a new span from Ctx or if none is found a new root-span
 -spec start_span_from_context(tracer(), any(), context:context()) ->
-  span().
+  {ok, {context:context(), span()}}.
 start_span_from_context(Tracer, Operation, Ctx) ->
-  case context:get(Ctx, active_span) of
-    {error, notfound} -> start_span(Tracer, Operation);
-    {ok, Span}        ->
-      {ok, new_span( Tracer
-                   , Operation
-                   , undefined
-                   , new_ctx(get_trace_id(span_ctx(Span))) )}
-  end.
+  {ok, NewSpan} =
+    case context:get(Ctx, active_span) of
+      {error, notfound} ->
+        start_span(Tracer, Operation);
+      {ok, Span}        ->
+        {ok, new_span( Tracer
+                     , Operation
+                     , undefined
+                     , new_ctx(get_trace_id(span_ctx(Span))) )}
+    end,
+  {ok, {context:set(Ctx, active_span, NewSpan), NewSpan}}.
 
 %% @doc Report a span as finished to the Tracer
 -spec finish_span(tracer(), span()) ->
