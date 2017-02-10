@@ -41,7 +41,7 @@
 -export_type([timestamp/0]).
 
 %%%_* Records ==========================================================
--record(s, { operation = error(operation) :: any()
+-record(s, { operation = error(operation) :: term()
            , ctx       = error(ctx)       :: span_ctx()
            , tracer    = error(tracer)    :: module()
            , start_ts  = error(start_ts)  :: non_neg_integer()

@@ -197,8 +197,10 @@ local_ip_v4() ->
                    size(Addr) == 4, Addr =/= {127,0,0,1}
          ]) ) ).
 
-binary(I) when is_integer(I) -> integer_to_binary(I);
-binary(A) when is_atom(A)    -> list_to_atom(atom_to_list(A)).
+binary(I) when is_integer(I) -> binary(integer_to_binary(I));
+binary(L) when is_list(L)    -> binary(list_to_binary(L));
+binary(A) when is_atom(A)    -> binary(atom_to_list(A));
+binary(B)                    -> B.
 
 flush(Msg) ->
   receive Msg -> flush(Msg)
