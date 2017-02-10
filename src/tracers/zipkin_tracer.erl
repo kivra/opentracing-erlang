@@ -171,25 +171,35 @@ binary_annotations(ServiceName, Span) ->
     of
       %{undefined, client} ->
       {undefined, resource} -> %% @TODO: Change this
-        [binary_annotation(?LOCAL_COMPONENT, ServiceName, ServiceName, local_ip_v4())];
-      _ ->
-        []
+        [ binary_annotation( ?LOCAL_COMPONENT
+                           , ServiceName
+                           , ServiceName
+                           , local_ip_v4() )
+        , binary_annotation( <<"span.kind">>
+                           , opentracing:get_span_kind(Span)
+                           , ServiceName
+                           , local_ip_v4() ) ];
+      {_, _} ->
+        [ binary_annotation( <<"span.kind">>
+                           , opentracing:get_span_kind(Span)
+                           , ServiceName
+                           , local_ip_v4() ) ]
     end,
     opentracing:get_span_tags(Span)).
 
 binary_annotation(Key, Value, ServiceName, Ip) ->
-  [ {<<"key">>,      Key}
-  , {<<"value">>,    Value}
-  , {<<"endpoint">>, [ {<<"serviceName">>, ServiceName}
-                     , {<<"ipv4">>,        Ip}
+  [ {<<"key">>,      binary(Key)}
+  , {<<"value">>,    binary(Value)}
+  , {<<"endpoint">>, [ {<<"serviceName">>, binary(ServiceName)}
+                     , {<<"ipv4">>,        binary(Ip)}
                     %, {<<"port">>,        9411}
                      ]}
   ].
 
 annotation(ServiceName, Value, Timestamp) ->
   [ {<<"timestamp">>, Timestamp}
-  , {<<"value">>,     Value}
-  , {<<"endpoint">>,  [ {<<"serviceName">>, ServiceName}
+  , {<<"value">>,     binary(Value)}
+  , {<<"endpoint">>,  [ {<<"serviceName">>, binary(ServiceName)}
                      %, {<<"ipv4">>,        Ip}
                      %, {<<"port">>,        9411}
                       ]}
