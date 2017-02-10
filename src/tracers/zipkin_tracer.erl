@@ -28,9 +28,18 @@
 -export([code_change/3]).
 
 %%%_* Macros ===========================================================
-%% Make sure we time out internally before our clients time out.
--define(TICK_TIME,       1000). % Tick-time in ms
--define(SPANS_THRESHOLD, 100).  % Number of Spans to accumulate before flushing
+%% Spans are keps in a circular buffer and flushed to Zipkin once it reaches
+%% `SPANS_THRESHOLD` or the next `tick` triggered by the `TICK_TIME` interval,
+%% whatever comes first.
+%% If for some reason an invalid HTTP-response is returned zipkin_tracer will
+%% try to send the accumulated spans next time. It will continue to accumulate
+%% Spans to a total of `MAX_SPANS_THRESHOLD` before evicting from the end of
+%% the buffer.
+-define(TICK_TIME,           1000). % Tick-time in ms
+-define(SPANS_THRESHOLD,     100).  % Number of Spans to accumulate before
+                                    % flushing.
+-define(MAX_SPANS_THRESHOLD, 100).  % Max Number of Spans to accumulate before
+                                    % evicting
 -define(http_options,    [ {timeout,         5000}
                          , {connect_timeout, 1000}
                          , {version,         "HTTP/1.1"} ]).
@@ -100,7 +109,8 @@ maybe_flush_spans(State, Spans) ->
   end.
 
 flush_spans(_, [])        -> [];
-flush_spans(#s{ ip=Ip, port=Port, service_name=SName}, Spans) ->
+flush_spans(#s{ ip=Ip, port=Port, service_name=SName}, InputSpans) ->
+  Spans = lists:sublist(InputSpans, ?MAX_SPANS_THRESHOLD),
   case send_spans(
          Ip,
          Port,
