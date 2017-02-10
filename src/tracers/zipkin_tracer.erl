@@ -188,8 +188,7 @@ local_ip_v4() ->
          ]) ) ).
 
 binary(I) when is_integer(I) -> integer_to_binary(I);
-binary(L) when is_list(L)    -> list_to_binary(L);
-binary(B) when is_binary(B)  -> B.
+binary(A) when is_atom(A)    -> list_to_atom(atom_to_list(A)).
 
 flush(Msg) ->
   receive Msg -> flush(Msg)

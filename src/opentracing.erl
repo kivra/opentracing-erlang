@@ -21,6 +21,8 @@
 
 %%%_ * Getter / Setters ------------------------------------------------
 -export([span_ctx/1]).
+-export([add_span_tag/3]).
+-export([del_span_tag/2]).
 -export([get_span_tags/1]).
 -export([set_span_tags/2]).
 -export([get_span_id/1]).
@@ -32,19 +34,20 @@
 -export([get_duration/1]).
 
 %%%_* Types ------------------------------------------------------------
--export_type([options/0]).
 -export_type([span/0]).
--export_type([span_tags/0]).
+-export_type([options/0]).
 -export_type([baggage/0]).
+-export_type([span_tags/0]).
+-export_type([timestamp/0]).
 
 %%%_* Records ==========================================================
 -record(s, { operation = error(operation) :: any()
            , ctx       = error(ctx)       :: span_ctx()
            , tracer    = error(tracer)    :: module()
            , start_ts  = error(start_ts)  :: non_neg_integer()
-           , duration  = undefined        :: undefined | non_neg_integer()
-           , parent_id = undefined        :: undefined | span_id()
-           , kind      = server           :: client | server | resource
+           , duration  = undefined        :: undefined | timestamp()
+           , parent_id = undefined        :: parent_id()
+           , kind      = server           :: span_kind()
            , tags      = maps:new()       :: span_tags()
            }).
 -record(s_ctx, { trace_id = error(trace_id) :: trace_id()
@@ -55,15 +58,18 @@
 
 %%%_* Types ============================================================
 -type span()             :: #s{}.
--type operation()        :: binary() | string() | iolist().
+-type tracer()           :: module().
 -type span_id()          :: non_neg_integer().
 -type carrier()          :: opentracing_tracer:carrier().
 -type options()          :: opentracing_tracer:options().
 -type baggage()          :: map().
--type tracer()           :: module().
 -type trace_id()         :: non_neg_integer().
 -type span_ctx()         :: #s_ctx{}.
+-type parent_id()        :: undefined | span_id().
+-type span_kind()        :: client | server | resource.
+-type operation()        :: binary() | string() | iolist().
 -type span_tags()        :: map().
+-type timestamp()        :: non_neg_integer().
 -type serialize_format() :: opentracing_tracing:serialize_format().
 -type span_reference()   :: {child_of, span()} | {follows_from, span()}.
 -type span_options()     :: list(span_reference()).
@@ -177,24 +183,57 @@ get_span_tags(#s{ tags = Tags }) ->
 set_span_tags(Span, Tags) ->
   Span#s{ tags = Tags }.
 
+%% @doc Add single Tag to a Span
+-spec add_span_tag(span(), term(), term()) ->
+  span().
+add_span_tag(Span, Key, Value) ->
+  Span#s{ tags = maps:put(Key, Value, get_span_tags(Span)) }.
+
+%% @doc Del single Tag on a Span
+-spec del_span_tag(span(), term()) ->
+  span().
+del_span_tag(Span, Key) ->
+  Span#s{ tags = maps:remove(Key, get_span_tags(Span)) }.
+
+%% @doc get trace-id from a Span
+-spec get_trace_id(span_ctx()) ->
+  trace_id().
 get_trace_id(#s_ctx{ trace_id = TraceId}) ->
   TraceId.
 
+%% @doc get span-id from a Span
+-spec get_span_id(span_ctx()) ->
+  span_id().
 get_span_id(#s_ctx{ span_id = SpanId }) ->
   SpanId.
 
+%% @doc get parent-id from a Span
+-spec get_parent_id(span()) ->
+  parent_id().
 get_parent_id(#s{ parent_id = ParentId }) ->
   ParentId.
 
+%% @doc get span-kind from a Span
+-spec get_span_kind(span()) ->
+  span_kind().
 get_span_kind(#s{ kind = Kind }) ->
   Kind.
 
+%% @doc get operation, i.e. name from a Span
+-spec get_operation(span()) ->
+  span_kind().
 get_operation(#s{ operation = Operation }) ->
   Operation.
 
+%% @doc get start timestamp in `ms` from a Span
+-spec get_timestamp(span()) ->
+  timestamp().
 get_timestamp(#s{ start_ts = Timestamp }) ->
   Timestamp.
 
+%% @doc get duration in `ms` from a Span
+-spec get_duration(span()) ->
+  timestamp().
 get_duration(#s{ duration = Duration }) ->
   Duration.
 
