@@ -35,6 +35,7 @@
 %% try to send the accumulated spans next time. It will continue to accumulate
 %% Spans to a total of `MAX_SPANS_THRESHOLD` before evicting from the end of
 %% the buffer.
+%%
 -define(TICK_TIME,           1000). % Tick-time in ms
 -define(SPANS_THRESHOLD,     100).  % Number of Spans to accumulate before
                                     % flushing.
@@ -161,19 +162,24 @@ annotations(ServiceName, Span) ->
   end.
 
 binary_annotations(ServiceName, Span) ->
-  case { opentracing:get_parent_id(Span)
-       , opentracing:get_span_kind(Span) }
-  of
-    %{undefined, client} ->
-    {undefined, resource} -> %% @TODO: Change this
-      [binary_annotation(ServiceName, ?LOCAL_COMPONENT, local_ip_v4())];
-    _ ->
-      []
-  end.
+  maps:fold(
+    fun(Key, Value, Acc) ->
+      [binary_annotation(Key, Value, ServiceName, local_ip_v4())|Acc]
+    end,
+    case { opentracing:get_parent_id(Span)
+         , opentracing:get_span_kind(Span) }
+    of
+      %{undefined, client} ->
+      {undefined, resource} -> %% @TODO: Change this
+        [binary_annotation(?LOCAL_COMPONENT, ServiceName, ServiceName, local_ip_v4())];
+      _ ->
+        []
+    end,
+    opentracing:get_span_tags(Span)).
 
-binary_annotation(ServiceName, Key, Ip) ->
+binary_annotation(Key, Value, ServiceName, Ip) ->
   [ {<<"key">>,      Key}
-  , {<<"value">>,    ServiceName}
+  , {<<"value">>,    Value}
   , {<<"endpoint">>, [ {<<"serviceName">>, ServiceName}
                      , {<<"ipv4">>,        Ip}
                     %, {<<"port">>,        9411}
