@@ -27,6 +27,8 @@
 -export([set_span_tags/2]).
 -export([get_span_id/1]).
 -export([get_span_kind/1]).
+-export([get_sampled/1]).
+-export([set_sampled/2]).
 -export([get_parent_id/1]).
 -export([get_trace_id/1]).
 -export([get_operation/1]).
@@ -151,10 +153,11 @@ start_span_from_context(Tracer, Operation, Ctx) ->
       {error, notfound} ->
         start_span(Tracer, Operation);
       {ok, Span}        ->
+        SpanCtx = span_ctx(Span),
         {ok, new_span( Tracer
                      , Operation
                      , undefined
-                     , new_ctx(get_trace_id(span_ctx(Span))) )}
+                     , new_ctx(get_trace_id(SpanCtx), get_sampled(SpanCtx))) }
     end,
   {ok, {context:set(Ctx, active_span, NewSpan), NewSpan}}.
 
@@ -207,6 +210,18 @@ get_trace_id(#s_ctx{ trace_id = TraceId}) ->
 get_span_id(#s_ctx{ span_id = SpanId }) ->
   SpanId.
 
+%% @doc get sampled from a Trace, if `true` this Trace should be sampled
+-spec get_sampled(span_ctx()) ->
+  boolean().
+get_sampled(#s_ctx{ sampled = Sampled }) ->
+  Sampled.
+
+%% @doc set sampled on a Trace, if `true` this Trace should be sampled
+-spec set_sampled(span(), boolean()) ->
+  span().
+set_sampled(#s{ ctx = SpanCtx } = Span, Bool) ->
+  Span#s{ ctx = SpanCtx#s_ctx { sampled = Bool } }.
+
 %% @doc get parent-id from a Span
 -spec get_parent_id(span()) ->
   parent_id().
@@ -254,10 +269,10 @@ new_ctx() ->
   new_ctx(generate_id()).
 
 new_ctx(TraceId) ->
-  new_ctx(TraceId, generate_id()).
+  new_ctx(TraceId, false).
 
-new_ctx(TraceId, SpanId) ->
-  #s_ctx{ trace_id = TraceId, span_id = SpanId }.
+new_ctx(TraceId, Sampled) ->
+  #s_ctx{ trace_id = TraceId, span_id = generate_id(), sampled = Sampled }.
 
 new_span(Tracer, Operation, ParentId, SpanCtx) ->
   #s{ tracer    = Tracer

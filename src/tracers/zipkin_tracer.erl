@@ -64,12 +64,17 @@
            }).
 
 %%%_ * API -------------------------------------------------------------
-start(Args)      -> start_link(Args).
-start_link(Args) -> gen_server:start_link({local, ?MODULE}, ?MODULE, Args, []).
-stop()           -> gen_server:call(?MODULE, stop).
-drain()          -> gen_server:call(?MODULE, drain, infinity).
+start(Args)       -> start_link(Args).
+start_link(Args)  -> gen_server:start_link({local, ?MODULE}, ?MODULE, Args, []).
+stop()            -> gen_server:call(?MODULE, stop).
+drain()           -> gen_server:call(?MODULE, drain, infinity).
 
-finish_span(Span) -> gen_server:cast(?MODULE, {finish_span, Span}).
+finish_span(Span) ->
+  case opentracing:get_sampled(opentracing:span_ctx(Span)) of
+    true  -> gen_server:cast(?MODULE, {finish_span, Span});
+    false -> ok
+  end.
+
 extract(_, _)   -> {ok, extract}.
 inject(_, _, _) -> {ok, inject}.
 
@@ -187,6 +192,11 @@ binary_annotations(ServiceName, Span) ->
     end,
     opentracing:get_span_tags(Span)).
 
+%% Zipkin treats the presence of an error annotation as error, regardles
+%% of `true` or `false`
+binary_annotation(error,       false, _, _)    -> [];
+binary_annotation("error",     false, _, _)    -> [];
+binary_annotation(<<"error">>, false, _, _)    -> [];
 binary_annotation(Key, Value, ServiceName, Ip) ->
   [ {<<"key">>,      binary(Key)}
   , {<<"value">>,    binary(Value)}
