@@ -49,7 +49,7 @@
            , start_ts  = error(start_ts)  :: non_neg_integer()
            , duration  = undefined        :: undefined | timestamp()
            , parent_id = undefined        :: parent_id()
-           , kind      = server           :: span_kind()
+           , kind      = 'SERVER'         :: span_kind()
            , tags      = maps:new()       :: span_tags()
            }).
 -record(s_ctx, { trace_id = error(trace_id) :: trace_id()
@@ -68,7 +68,7 @@
 -type trace_id()         :: non_neg_integer().
 -type span_ctx()         :: #s_ctx{}.
 -type parent_id()        :: undefined | span_id().
--type span_kind()        :: client | server | resource.
+-type span_kind()        :: 'CLIENT' | 'SERVER' | 'PRODUCER' | 'CONSUMER'.
 -type operation()        :: binary() | string() | iolist().
 -type span_tags()        :: map().
 -type timestamp()        :: non_neg_integer().

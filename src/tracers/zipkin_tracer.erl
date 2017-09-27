@@ -47,13 +47,6 @@
 -define(options,         [ {body_format,     binary}
                          , {full_result,     false} ]).
 
-%% Zipkin
--define(LOCAL_COMPONENT, <<"lc">>).
--define(CLIENT_SEND,     <<"cs">>).
--define(CLIENT_RECV,     <<"cr">>).
--define(SERVER_SEND,     <<"ss">>).
--define(SERVER_RECV,     <<"sr">>).
-
 %%%_* Code =============================================================
 %%%_ * Types -----------------------------------------------------------
 -record(s, { ip           = error('s.ip')   :: string()                 % Ip
@@ -127,7 +120,7 @@ flush_spans(#s{ ip=Ip, port=Port, service_name=SName}, InputSpans) ->
   end.
 
 send_spans(Ip, Port, Spans) ->
-  Req = { "http://"++Ip++":"++integer_to_list(Port)++"/api/v1/spans"
+  Req = { "http://"++Ip++":"++integer_to_list(Port)++"/api/v2/spans"
         , []
         , "application/json"
         , jsx:encode(lists:reverse(Spans)) },
@@ -142,78 +135,38 @@ send_spans(Ip, Port, Spans) ->
 encode_span(ServiceName, Span) ->
   Ctx = opentracing:span_ctx(Span),
   lists:flatten(
-    [ {<<"traceId">>,           binary(opentracing:get_trace_id(Ctx))}
-    , {<<"id">>,                binary(opentracing:get_span_id(Ctx))}
+    [ {<<"traceId">>,           encode_id(opentracing:get_trace_id(Ctx))}
+    , {<<"id">>,                encode_id(opentracing:get_span_id(Ctx))}
     , {<<"name">>,              binary(opentracing:get_operation(Span))}
     , {<<"timestamp">>,         opentracing:get_timestamp(Span)}
     , {<<"duration">>,          opentracing:get_duration(Span)}
-    , {<<"annotations">>,       annotations(ServiceName, Span)}
-    , {<<"binaryAnnotations">>, binary_annotations(ServiceName, Span)}
+    , {<<"kind">>,              binary(opentracing:get_span_kind(Span))}
+    , {<<"localEndpoint">>,     [ {<<"serviceName">>, ServiceName}
+                                , {<<"ipv4">>,        local_ip_v4()}
+                               %, {<<"port">>,        } TODO
+                                ]}
+    , case opentracing:get_parent_id(Span) of
+        undefined -> [];
+        ParentId  -> {<<"parentId">>, encode_id(ParentId)}
+      end
+    , case tags(Span) of
+        []   -> [];
+        Tags -> {<<"tags">>, Tags}
+      end
+    %, {<<"annotations">>,       annotations(ServiceName, Span)}
     ]).
 
-annotations(ServiceName, Span) ->
-  StartTs  = opentracing:get_timestamp(Span),
-  Duration = opentracing:get_duration(Span),
-  case opentracing:get_span_kind(Span) of
-    client   ->
-      [ annotation(ServiceName, ?CLIENT_SEND, StartTs)
-      , annotation(ServiceName, ?CLIENT_RECV, StartTs + Duration) ];
-    server   ->
-      [ annotation(ServiceName, ?SERVER_RECV, StartTs)
-      , annotation(ServiceName, ?SERVER_SEND, StartTs + Duration) ];
-    resource ->
-      [ annotation(ServiceName, ?CLIENT_SEND, StartTs)
-      , annotation(ServiceName, ?CLIENT_RECV, StartTs + Duration) ]
-  end.
-
-binary_annotations(ServiceName, Span) ->
-  maps:fold(
-    fun(Key, Value, Acc) ->
-      [binary_annotation(Key, Value, ServiceName, local_ip_v4())|Acc]
-    end,
-    case { opentracing:get_parent_id(Span)
-         , opentracing:get_span_kind(Span) }
-    of
-      %{undefined, client} ->
-      {undefined, resource} -> %% @TODO: Change this
-        [ binary_annotation( ?LOCAL_COMPONENT
-                           , ServiceName
-                           , ServiceName
-                           , local_ip_v4() )
-        , binary_annotation( <<"span.kind">>
-                           , opentracing:get_span_kind(Span)
-                           , ServiceName
-                           , local_ip_v4() ) ];
-      {_, _} ->
-        [ binary_annotation( <<"span.kind">>
-                           , opentracing:get_span_kind(Span)
-                           , ServiceName
-                           , local_ip_v4() ) ]
-    end,
-    opentracing:get_span_tags(Span)).
+tags(Span) ->
+  lists:flatten(
+    maps:fold(
+      fun(<<"error">>, false, Acc) -> Acc;
+         (Key, Value, Acc)         -> [{binary(Key), binary(Value)}|Acc]
+      end,
+      [],
+      opentracing:get_span_tags(Span))).
 
 %% Zipkin treats the presence of an error annotation as error, regardles
 %% of `true` or `false`
-binary_annotation(error,       false, _, _)    -> [];
-binary_annotation("error",     false, _, _)    -> [];
-binary_annotation(<<"error">>, false, _, _)    -> [];
-binary_annotation(Key, Value, ServiceName, Ip) ->
-  [ {<<"key">>,      binary(Key)}
-  , {<<"value">>,    binary(Value)}
-  , {<<"endpoint">>, [ {<<"serviceName">>, binary(ServiceName)}
-                     , {<<"ipv4">>,        binary(Ip)}
-                    %, {<<"port">>,        9411}
-                     ]}
-  ].
-
-annotation(ServiceName, Value, Timestamp) ->
-  [ {<<"timestamp">>, Timestamp}
-  , {<<"value">>,     binary(Value)}
-  , {<<"endpoint">>,  [ {<<"serviceName">>, binary(ServiceName)}
-                     %, {<<"ipv4">>,        Ip}
-                     %, {<<"port">>,        9411}
-                      ]}
-  ].
 
 local_ip_v4() ->
   {ok, Addrs} = inet:getifaddrs(),
@@ -227,6 +180,8 @@ binary(I) when is_integer(I) -> binary(integer_to_binary(I));
 binary(L) when is_list(L)    -> binary(list_to_binary(L));
 binary(A) when is_atom(A)    -> binary(atom_to_list(A));
 binary(B)                    -> B.
+
+encode_id(Id) -> binary(string:to_lower(integer_to_list(Id, 16))).
 
 flush(Msg) ->
   receive Msg -> flush(Msg)
