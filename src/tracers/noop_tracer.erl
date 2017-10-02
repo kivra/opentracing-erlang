@@ -12,14 +12,14 @@
 -export([start/1]).
 -export([finish_span/1]).
 -export([extract/2]).
--export([inject/3]).
+-export([inject/2]).
 
 %%%_* Code =============================================================
 %%%_ * API -------------------------------------------------------------
 start(_)        -> {ok, noop_tracer}.
 finish_span(_)  -> ok.
-extract(_, _)   -> {ok, extract}.
-inject(_, _, _) -> {ok, inject}.
+extract(_, _)   -> {error, not_implemented}.
+inject(_, _)    -> {ok, []}.
 
 %%%_* Editor ===========================================================
 %%% Local Variables:

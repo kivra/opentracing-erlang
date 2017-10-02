@@ -24,7 +24,7 @@
 -callback finish_span(opentracing:span()) ->
   ok | {error, atom()}.
 
--callback inject(opentracing:span_ctx(), serialize_format(), carrier()) ->
+-callback inject(proplists:proplist(), serialize_format()) ->
   {ok, any()} | {error, atom()}.
 
 -callback extract(serialize_format(), carrier()) ->

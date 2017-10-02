@@ -17,7 +17,7 @@
 -export([stop/0]).
 -export([finish_span/1]).
 -export([extract/2]).
--export([inject/3]).
+-export([inject/2]).
 
 %% gen_server
 -export([init/1]).
@@ -46,6 +46,11 @@
                          , {version,         "HTTP/1.1"} ]).
 -define(options,         [ {body_format,     binary}
                          , {full_result,     false} ]).
+-define(httpheaders,     [ {trace_id,  <<"x-b3-traceid">>}
+                         , {span_id,   <<"x-b3-spanid">>}
+                         , {parent_id, <<"x-b3-parentspanid">>}
+                         , {sampled,   <<"x-b3-sampled">>}
+                         ]).
 
 %%%_* Code =============================================================
 %%%_ * Types -----------------------------------------------------------
@@ -68,8 +73,36 @@ finish_span(Span) ->
     false -> ok
   end.
 
-extract(_, _)   -> {ok, extract}.
-inject(_, _, _) -> {ok, inject}.
+extract(Format, Map) when is_map(Map) -> extract(Format, maps:to_list(Map));
+extract(httpheaders, Headers)         ->
+  ExtData = lists:map(fun({K, H}) ->
+                        {K, to_span_data(assoc(Headers, H, undefined))}
+                      end, ?httpheaders),
+  case
+    lists:filter(
+      fun({parent_id, undefined}) -> false; % Optional
+         ({_, undefined})         -> true;
+         (_)                      -> false
+      end,
+      ExtData)
+  of
+    [] -> {ok, ExtData};
+    _  -> {error, span_ctx_corrupted}
+  end;
+extract(_, _) ->
+  {error, not_implemented}.
+
+inject(SpanCtxData, httpheaders) ->
+  {ok, lists:foldl(
+         fun({K, H}, Acc) ->
+           case assoc(SpanCtxData, K) of
+             {error, notfound} -> Acc;
+             {ok, undefined}   -> Acc;
+             {ok, Val}         -> [{H, binary(Val)} | Acc]
+           end
+         end, [], ?httpheaders)};
+inject(_, _) ->
+  {error, not_implemented}.
 
 %%%_ * gen_server callbacks --------------------------------------------
 init(Args) ->
@@ -199,6 +232,11 @@ assoc(KVs, K, Def) ->
     {ok, V}           -> V;
     {error, notfound} -> Def
   end.
+
+to_span_data(<<"true">>)              -> true;
+to_span_data(<<"false">>)             -> false;
+to_span_data(Val) when is_binary(Val) -> binary_to_integer(Val);
+to_span_data(Val)                     -> Val.
 
 %%%_* Editor ===========================================================
 %%% Local Variables:

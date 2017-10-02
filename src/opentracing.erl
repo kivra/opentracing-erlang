@@ -10,7 +10,7 @@
 %%%_ * API -------------------------------------------------------------
 -export([tracer/0]).
 -export([tracer/1]).
--export([inject/4]).
+-export([inject/3]).
 -export([extract/3]).
 -export([start_span/2]).
 -export([start_span/3]).
@@ -48,14 +48,14 @@
            , tracer    = error(tracer)    :: module()
            , start_ts  = error(start_ts)  :: non_neg_integer()
            , duration  = undefined        :: undefined | timestamp()
-           , parent_id = undefined        :: parent_id()
            , kind      = 'SERVER'         :: span_kind()
            , tags      = maps:new()       :: span_tags()
            }).
--record(s_ctx, { trace_id = error(trace_id) :: trace_id()
-               , span_id  = error(span_id)  :: span_id()
-               , sampled  = false           :: boolean()
-               , baggage  = maps:new()      :: baggage()
+-record(s_ctx, { trace_id  = error(trace_id) :: trace_id()
+               , span_id   = error(span_id)  :: span_id()
+               , parent_id = undefined       :: parent_id()
+               , sampled   = false           :: boolean()
+               , baggage   = maps:new()      :: baggage()
                }).
 
 %%%_* Types ============================================================
@@ -96,16 +96,29 @@ tracer(Tracer, Options) ->
   Tracer:start(Options).
 
 %% @doc Inject SpanCtx for over-the-wire serialization of data
--spec inject(module(), span_ctx(), serialize_format(), carrier()) ->
-  {ok, span_ctx()} | {error, atom()}.
-inject(Tracer, SpanCtx, Format, Carrier) ->
-  Tracer:inject(SpanCtx, Format, Carrier).
+-spec inject(module(), span_ctx(), serialize_format()) ->
+  {ok, any()} | {error, atom()}.
+inject(Tracer, SpanCtx, Format) ->
+  Tracer:inject(
+    [ {trace_id,  SpanCtx#s_ctx.trace_id }
+    , {span_id,   SpanCtx#s_ctx.span_id }
+    , {parent_id, SpanCtx#s_ctx.parent_id }
+    , {sampled,   SpanCtx#s_ctx.sampled }
+    ], Format).
 
 %% @doc Extract SpanCtx from over-the-wire serialized data
 -spec extract(module(), serialize_format(), carrier()) ->
   {ok, span_ctx()} | {error, atom()}.
 extract(Tracer, Format, Carrier) ->
-  Tracer:extract(Format, Carrier).
+  case Tracer:extract(Format, Carrier) of
+    {error, _}=E  -> E;
+    {ok, ExtData} ->
+      {ok, #s_ctx{ trace_id  = assoc(ExtData, trace_id)
+                 , span_id   = assoc(ExtData, span_id)
+                 , parent_id = assoc(ExtData, parent_id)
+                 , sampled   = assoc(ExtData, sampled)
+                 } }
+  end.
 
 %% @doc Start a new root span
 -spec start_span(tracer(), operation()) ->
@@ -124,7 +137,10 @@ start_span(Tracer, Operation, Options) ->
       {{child_of, Ctx}, false}               -> Ctx;
       {false,           {follows_from, Ctx}} -> Ctx
     end,
-  {ok, new_span(Tracer, Operation, undefined, new_ctx(SCtx#s_ctx.trace_id))}.
+  {ok, new_span( Tracer
+               , Operation
+               , undefined
+               , new_ctx(get_trace_id(SCtx), get_sampled(SCtx)))}.
 
 -spec run_span(tracer(), operation(), fun()) ->
   ok | {error, atom()}.
@@ -225,7 +241,7 @@ set_sampled(#s{ ctx = SpanCtx } = Span, Bool) ->
 %% @doc get parent-id from a Span
 -spec get_parent_id(span()) ->
   parent_id().
-get_parent_id(#s{ parent_id = ParentId }) ->
+get_parent_id(#s{ ctx=#s_ctx{ parent_id = ParentId}  }) ->
   ParentId.
 
 %% @doc get span-kind from a Span
@@ -272,17 +288,26 @@ new_ctx(TraceId) ->
   new_ctx(TraceId, false).
 
 new_ctx(TraceId, Sampled) ->
-  #s_ctx{ trace_id = TraceId, span_id = generate_id(), sampled = Sampled }.
+  #s_ctx{ trace_id  = TraceId
+        , span_id   = generate_id()
+        , parent_id = generate_id()
+        , sampled   = Sampled
+        }.
 
 new_span(Tracer, Operation, ParentId, SpanCtx) ->
   #s{ tracer    = Tracer
     , operation = Operation
     , start_ts  = ts()
-    , parent_id = ParentId
-    , ctx       = SpanCtx }.
+    , ctx       = SpanCtx#s_ctx{ parent_id=ParentId} }.
 
 generate_id() ->
   rand:uniform(16#ffffffffffffffff).
+
+assoc(L, K) ->
+  case lists:keyfind(K, 1, L) of
+    {K, V} -> V;
+    false  -> {error, notfound}
+  end.
 
 %%%_* Editor ===========================================================
 %%% Local Variables:
